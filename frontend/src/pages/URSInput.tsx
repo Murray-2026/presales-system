@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Card, Input, Button, Upload, Tabs, Tag, Table, Descriptions, message, Spin, Space, Divider, Alert } from 'antd'
 import { UploadOutlined, RobotOutlined, FileTextOutlined, DownloadOutlined, BulbOutlined, CheckCircleOutlined } from '@ant-design/icons'
 import type { UploadProps } from 'antd'
-import axios from 'axios'
+import { analyzeURSText, generateProposal, parseURSFile } from '../services/urs-engine'
+import type { AnalysisResult, Proposal } from '../services/urs-engine'
 
 const { TextArea } = Input
 
@@ -10,10 +11,11 @@ export default function URSInput() {
   const [ursText, setUrsText] = useState('')
   const [customer, setCustomer] = useState('')
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<AnalysisResult | null>(null)
+  const [proposal, setProposal] = useState<Proposal | null>(null)
   const [activeTab, setActiveTab] = useState('input')
 
-  // 分析URS文本
+  // 分析URS文本（纯前端）
   const handleAnalyzeText = async () => {
     if (!ursText.trim()) {
       message.warning('请先输入URS内容')
@@ -21,51 +23,60 @@ export default function URSInput() {
     }
     setLoading(true)
     try {
-      const res = await axios.post('/api/urs/analyze-text', {
-        text: ursText,
-        customer: customer,
-        language: '中文',
-      })
-      setResult(res.data)
+      // 前端分析
+      const analysis = analyzeURSText(ursText)
+      const proposalDoc = generateProposal(analysis, customer, '中文')
+      setResult(analysis)
+      setProposal(proposalDoc)
       setActiveTab('result')
-      message.success('分析完成！')
+      message.success('分析完成！（纯前端运行，无需后端）')
     } catch (err) {
-      message.error('分析失败，请检查后端是否运行')
+      message.error('分析失败：' + (err instanceof Error ? err.message : '未知错误'))
     } finally {
       setLoading(false)
     }
   }
 
-  // 上传URS文档
+  // 上传URS文档（纯前端）
   const handleUpload: UploadProps['customRequest'] = async (options) => {
     const { file, onSuccess, onError } = options
     setLoading(true)
     try {
-      const formData = new FormData()
-      formData.append('file', file as Blob)
-      formData.append('customer', customer)
-      const res = await axios.post('/api/urs/analyze-file', formData)
-      setResult(res.data)
+      // 前端解析文档
+      const fileText = await parseURSFile(file as File)
+      // 前端分析
+      const analysis = analyzeURSText(fileText)
+      const proposalDoc = generateProposal(analysis, customer, '中文')
+      setResult(analysis)
+      setProposal(proposalDoc)
       setActiveTab('result')
-      message.success('文档解析完成！')
-      onSuccess?.(res.data)
+      message.success('文档解析完成！（纯前端运行，无需后端）')
+      onSuccess?.(analysis)
     } catch (err) {
       onError?.(err as Error)
-      message.error('文档解析失败')
+      message.error('文档解析失败：' + (err instanceof Error ? err.message : '未知错误'))
     } finally {
       setLoading(false)
     }
   }
 
-  const params = result?.analysis?.extracted_params || {}
-  const recommended = result?.analysis?.recommended_product || {}
-  const proposal = result?.proposal || {}
+  const params = result?.extracted_params || {}
+  const recommended = result?.recommended_product || null
+  const sections = proposal?.sections || []
 
   return (
     <div className="page-container">
       <div className="page-header">
         <h2><RobotOutlined style={{ marginRight: 8 }} />URS智能分析</h2>
         <p>输入用户需求规范（URS），自动分析需求并生成技术方案和报价单</p>
+        <Alert
+          message="纯前端运行"
+          description="所有分析逻辑在浏览器中执行，无需启动后端服务，部署到 GitHub Pages 也能正常使用。"
+          type="info"
+          showIcon
+          closable
+          style={{ marginTop: 8 }}
+        />
       </div>
 
       <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
@@ -137,7 +148,7 @@ export default function URSInput() {
                 {/* 需求概览 */}
                 <Card title={<><BulbOutlined /> 需求提取结果</>}>
                   <Descriptions column={2} size="small" bordered>
-                    <Descriptions.Item label="URS内容长度">{result.analysis.raw_text_length} 字符</Descriptions.Item>
+                    <Descriptions.Item label="URS内容长度">{result.raw_text_length} 字符</Descriptions.Item>
                     <Descriptions.Item label="识别参数项">{Object.keys(params).length} 项</Descriptions.Item>
                     {params.chamber_size && (
                       <Descriptions.Item label="工作舱尺寸" span={2}>
@@ -169,11 +180,16 @@ export default function URSInput() {
                         {params.quantity.map((s: string) => <Tag key={s} color="red">{s}</Tag>)}
                       </Descriptions.Item>
                     )}
+                    {params.control && (
+                      <Descriptions.Item label="控制系统" span={2}>
+                        {params.control.map((s: string) => <Tag key={s} color="geekblue">{s}</Tag>)}
+                      </Descriptions.Item>
+                    )}
                   </Descriptions>
                 </Card>
 
                 {/* 推荐产品 */}
-                {recommended.product && (
+                {recommended && recommended.product && (
                   <Card title={<><CheckCircleOutlined style={{ color: '#52c41a' }} /> 推荐产品方案</>}>
                     <Alert
                       type="success"
@@ -187,7 +203,9 @@ export default function URSInput() {
                         <div>
                           <p>{recommended.product.spec}</p>
                           <p>参考报价：${recommended.product.base_price_usd?.toLocaleString()} USD</p>
-                          <p>匹配关键词：{recommended.matched_keywords?.map((k: string) => <Tag key={k}>{k}</Tag>)}</p>
+                          {recommended.matched_keywords && (
+                            <p>匹配关键词：{recommended.matched_keywords.map((k: string) => <Tag key={k}>{k}</Tag>)}</p>
+                          )}
                         </div>
                       }
                       showIcon
@@ -196,12 +214,12 @@ export default function URSInput() {
                 )}
 
                 {/* 技术方案预览 */}
-                {proposal.sections && proposal.sections.map((section: any, idx: number) => (
+                {sections.map((section, idx) => (
                   <Card key={idx} title={section.title} extra={section.price_range ? <Tag color="red">{section.price_range}</Tag> : null}>
                     <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: 13, lineHeight: 1.8 }}>
                       {section.content}
                     </div>
-                    {section.table && (
+                    {section.table && section.table.length > 0 && (
                       <div style={{ marginTop: 12, fontFamily: 'monospace', fontSize: 13 }}>
                         {section.table.map((line: string, i: number) => (
                           <div key={i}>{line}</div>
@@ -214,13 +232,13 @@ export default function URSInput() {
                 {/* 操作按钮 */}
                 <Card>
                   <Space>
-                    <Button type="primary" icon={<FileTextOutlined />} onClick={() => message.success('技术方案导出中...')}>
+                    <Button type="primary" icon={<FileTextOutlined />} onClick={() => message.success('技术方案导出功能开发中...')}>
                       导出DOCX方案
                     </Button>
-                    <Button icon={<DownloadOutlined />} onClick={() => message.success('报价单导出中...')}>
+                    <Button icon={<DownloadOutlined />} onClick={() => message.success('报价单导出功能开发中...')}>
                       导出报价单
                     </Button>
-                    <Button onClick={() => { setResult(null); setActiveTab('input') }}>
+                    <Button onClick={() => { setResult(null); setProposal(null); setActiveTab('input') }}>
                       重新输入
                     </Button>
                   </Space>
