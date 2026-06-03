@@ -123,20 +123,16 @@ def get_all_product_types() -> Dict[str, ProductType]:
                 StandardConfig("旗舰型", {"腔体配置": "4手套单腔体", "传递舱": "带传递舱", "材质": "316L不锈钢", "控制系统": "PLC+触摸屏+远程监控", "验证文件": "IQ/OQ/PQ"}, "旗舰配置，4手套口+316L+传递舱+全套验证"),
             ],
         ),
-        "VHP灭菌隔离器": ProductType(
-            name="VHP灭菌隔离器",
+        "无菌操作隔离器": ProductType(
+            name="无菌操作隔离器",
             model_base="VHP-1200",
             base_price=65000,
-            spec="工作舱1200×700×1600mm，VHP汽化过氧化氢灭菌，304不锈钢",
+            spec="工作舱1200×700×1600mm，VHP汽化过氧化氢灭菌，304不锈钢，适用于无菌操作和日常灭菌",
             compliance=["中国GMP", "EU GMP Annex 1"],
             option_groups={
                 "腔体配置": [
                     ProductOption("标准单腔体", 0, "", "标准尺寸1200×700×1600mm"),
                     ProductOption("加大腔体", 15000, "-XL", "加大尺寸1500×800×1800mm"),
-                ],
-                "灭菌方式": [
-                    ProductOption("VHP汽化过氧化氢", 0, "", "标准VHP灭菌"),
-                    ProductOption("VHP+紫外辅助", 8000, "-UV", "VHP灭菌+紫外辅助灭菌"),
                 ],
                 "材质": [
                     ProductOption("304不锈钢", 0, "", "标准304不锈钢"),
@@ -146,11 +142,16 @@ def get_all_product_types() -> Dict[str, ProductType]:
                     ProductOption("PLC+触摸屏", 0, "", "标准控制"),
                     ProductOption("PLC+触摸屏+数据记录", 8000, "-DR", "含审计追踪和数据导出"),
                 ],
+                "验证文件": [
+                    ProductOption("IQ/OQ", 0, ""),
+                    ProductOption("IQ/OQ+FAT", 8000, "-F", "含出厂验收测试"),
+                    ProductOption("IQ/OQ+FAT+SAT", 15000, "-FS", "含出厂验收和现场验收测试"),
+                ],
             },
             standard_configs=[
-                StandardConfig("标准型", {"腔体配置": "标准单腔体", "灭菌方式": "VHP汽化过氧化氢", "材质": "304不锈钢", "控制系统": "PLC+触摸屏"}, "基础VHP灭菌配置"),
-                StandardConfig("专业型", {"腔体配置": "标准单腔体", "灭菌方式": "VHP+紫外辅助", "材质": "304不锈钢", "控制系统": "PLC+触摸屏+数据记录"}, "专业VHP灭菌，带紫外辅助和数据记录"),
-                StandardConfig("加强型", {"腔体配置": "加大腔体", "灭菌方式": "VHP+紫外辅助", "材质": "316L不锈钢", "控制系统": "PLC+触摸屏+数据记录"}, "大腔体+316L+双灭菌方式"),
+                StandardConfig("标准型", {"腔体配置": "标准单腔体", "材质": "304不锈钢", "控制系统": "PLC+触摸屏", "验证文件": "IQ/OQ"}, "基础配置，满足常规无菌操作需求"),
+                StandardConfig("专业型", {"腔体配置": "标准单腔体", "材质": "304不锈钢", "控制系统": "PLC+触摸屏+数据记录", "验证文件": "IQ/OQ+FAT"}, "带数据记录和出厂验收"),
+                StandardConfig("加强型", {"腔体配置": "加大腔体", "材质": "316L不锈钢", "控制系统": "PLC+触摸屏+数据记录", "验证文件": "IQ/OQ+FAT+SAT"}, "大腔体+316L+FAT+SAT全套"),
             ],
         ),
         "集成式隔离器": ProductType(
