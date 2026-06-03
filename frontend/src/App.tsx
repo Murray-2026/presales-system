@@ -5,7 +5,7 @@ import Proposals from './pages/Proposals'
 import ProposalEditor from './pages/ProposalEditor'
 import Products from './pages/Products'
 import ProductConfig from './pages/ProductConfig'
-import Projects from './pages/Projects'
+import URSInput from './pages/URSInput'
 
 function App() {
   return (
@@ -17,6 +17,7 @@ function App() {
         <Route path="proposals/:id" element={<ProposalEditor />} />
         <Route path="products" element={<Products />} />
         <Route path="products/config" element={<ProductConfig />} />
+        <Route path="urs" element={<URSInput />} />
         <Route path="projects" element={<Projects />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
