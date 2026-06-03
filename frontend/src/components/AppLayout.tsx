@@ -7,6 +7,7 @@ import {
   AppstoreOutlined,
   ProjectOutlined,
   RobotOutlined,
+  ApiOutlined,
   SettingOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -17,6 +18,7 @@ const { Header, Sider, Content } = Layout
 const menuItems = [
   { key: '/', icon: <DashboardOutlined />, label: '工作台' },
   { key: '/urs', icon: <RobotOutlined />, label: 'URS分析' },
+  { key: '/device', icon: <ApiOutlined />, label: '设备监控' },
   { key: '/proposals', icon: <FileTextOutlined />, label: '方案管理' },
   { key: '/products', icon: <AppstoreOutlined />, label: '产品配置' },
   { key: '/projects', icon: <ProjectOutlined />, label: '项目管理' },
