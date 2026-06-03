@@ -6,6 +6,7 @@ import ProposalEditor from './pages/ProposalEditor'
 import Products from './pages/Products'
 import ProductConfig from './pages/ProductConfig'
 import URSInput from './pages/URSInput'
+import DeviceMonitor from './pages/DeviceMonitor'
 import Projects from './pages/Projects'
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
         <Route path="products" element={<Products />} />
         <Route path="products/config" element={<ProductConfig />} />
         <Route path="urs" element={<URSInput />} />
+        <Route path="device" element={<DeviceMonitor />} />
         <Route path="projects" element={<Projects />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
