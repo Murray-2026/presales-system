@@ -6,6 +6,7 @@ import ProposalEditor from './pages/ProposalEditor'
 import Products from './pages/Products'
 import ProductConfig from './pages/ProductConfig'
 import URSInput from './pages/URSInput'
+import Projects from './pages/Projects'
 
 function App() {
   return (
