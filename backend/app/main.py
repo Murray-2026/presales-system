@@ -16,8 +16,9 @@ async def health():
     return {"status": "ok", "message": "售前系统API运行正常"}
 
 # 导入路由
-from app.api import proposals, products, projects, urs
+from app.api import proposals, products, projects, urs, device
 app.include_router(proposals.router, prefix="/api")
 app.include_router(products.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(urs.router, prefix="/api")
+app.include_router(device.router, prefix="/api")
