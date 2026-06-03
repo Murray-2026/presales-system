@@ -590,11 +590,14 @@ function generateOptions(lang: string): string {
 
 // ==================== 文档解析器 ====================
 
+// 使用静态导入避免GitHub Pages子路径动态加载问题
+import * as mammoth from 'mammoth'
+import * as pdfjsLib from 'pdfjs-dist'
+
 /**
  * 解析DOCX文件 - 使用 mammoth.js
  */
 export async function parseDocx(file: File): Promise<string> {
-  const mammoth = await import('mammoth')
   const arrayBuffer = await file.arrayBuffer()
   const result = await mammoth.extractRawText({ arrayBuffer })
   return result.value
@@ -604,7 +607,6 @@ export async function parseDocx(file: File): Promise<string> {
  * 解析PDF文件 - 使用 pdfjs-dist
  */
 export async function parsePdf(file: File): Promise<string> {
-  const pdfjsLib = await import('pdfjs-dist')
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 
   const arrayBuffer = await file.arrayBuffer()
