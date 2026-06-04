@@ -19,41 +19,53 @@ class ProductOption:
 
 class StandardConfig:
     """预定义标准配置"""
-    def __init__(self, name: str, options: Dict[str, str], desc: str = ""):
+    def __init__(self, name: str, options: Dict[str, str], desc: str = "",
+                 multi_defaults: Optional[Dict[str, List[str]]] = None):
         self.name = name
         self.options = options
         self.desc = desc
+        self.multi_defaults = multi_defaults or {}  # {"内置配件": ["内置VHPS灭菌发生器"], ...}
 
     def to_dict(self):
-        return {"name": self.name, "options": self.options, "desc": self.desc}
+        return {"name": self.name, "options": self.options, "desc": self.desc, "multi_defaults": self.multi_defaults}
 
 
 class ProductType:
     """产品类型定义"""
     def __init__(self, name: str, model_base: str, base_price: float, spec: str,
                  compliance: List[str], option_groups: Dict[str, List[ProductOption]],
-                 standard_configs: List[StandardConfig], custom_params: Optional[Dict] = None):
+                 standard_configs: List[StandardConfig], custom_params: Optional[Dict] = None,
+                 multi_select_groups: Optional[List[str]] = None,
+                 multi_select_items: Optional[Dict[str, List[ProductOption]]] = None):
         self.name = name
         self.model_base = model_base
         self.base_price = base_price
         self.spec = spec
         self.compliance = compliance
-        self.option_groups = option_groups  # {group_name: [ProductOption, ...]}
+        self.option_groups = option_groups  # {group_name: [ProductOption, ...]} 单选组
         self.standard_configs = standard_configs
-        self.custom_params = custom_params or {}  # e.g. {"min_volume": 0.1, "price_per_m3": 50000}
+        self.custom_params = custom_params or {}
+        self.multi_select_groups = multi_select_groups or []  # 支持多选的组名列表
+        self.multi_select_items = multi_select_items or {}  # 多选组的选项 {group_name: [ProductOption, ...]}
 
     def get_option_groups(self) -> Dict[str, List[dict]]:
         return {k: [o.to_dict() for o in v] for k, v in self.option_groups.items()}
 
-    def get_standard_configs(self) -> List[dict]:
-        return [c.to_dict() for c in self.standard_configs]
+    def is_multi_select(self, group_name: str) -> bool:
+        return group_name in self.multi_select_groups
 
-    def calculate_price(self, selected_options: Dict[str, str], custom_values: Optional[Dict] = None) -> Dict:
+    def get_multi_select_items(self, group_name: str) -> List[dict]:
+        items = self.multi_select_items.get(group_name, [])
+        return [o.to_dict() for o in items]
+
+    def calculate_price(self, selected_options: Dict[str, str], custom_values: Optional[Dict] = None,
+                        multi_selections: Optional[Dict[str, List[str]]] = None) -> Dict:
         """计算配置总价"""
         total = self.base_price
         details = [{"item": "基础主机", "qty": 1, "price": self.base_price, "note": self.model_base}]
         model_suffix = ""
 
+        # 处理单选组
         for group_name, option_name in selected_options.items():
             if group_name in self.option_groups:
                 for opt in self.option_groups[group_name]:
@@ -64,6 +76,15 @@ class ProductType:
                         if opt.model_mod:
                             model_suffix += opt.model_mod
                         break
+
+        # 处理多选组（如内置配件）
+        multi_selections = multi_selections or {}
+        for group_name, selected_names in multi_selections.items():
+            if group_name in self.multi_select_groups and group_name in self.option_groups:
+                for opt in self.option_groups[group_name]:
+                    if opt.name in selected_names and opt.price_mod > 0:
+                        total += opt.price_mod
+                        details.append({"item": f"{group_name}: {opt.name}", "qty": 1, "price": opt.price_mod, "note": opt.desc})
 
         # 自定义参数（如VHP传递窗尺寸）
         price_extra = 0
@@ -92,35 +113,113 @@ def get_all_product_types() -> Dict[str, ProductType]:
             name="无菌检测隔离器",
             model_base="ISO-1500",
             base_price=150000,
-            spec="工作舱1500×800×1800mm，ISO 5洁净等级，不锈钢304，适用于无菌检查、阳性检测",
-            compliance=["中国GMP", "EU GMP Annex 1", "FDA"],
+            spec="工作舱1500×800×1800mm，ISO 5洁净等级，不锈钢304，适用于无菌检查（薄膜过滤法）、阳性检测",
+            compliance=["中国GMP", "EU GMP Annex 1", "FDA", "WHO GMP"],
+            multi_select_groups=["内置配件", "传感器配置", "文件资料"],
             option_groups={
-                "腔体配置": [
-                    ProductOption("单腔体", 0, "", "标准单腔体配置"),
-                    ProductOption("2手套单腔体", 5000, "-2G", "单腔体配2个手套口"),
-                    ProductOption("4手套单腔体", 12000, "-4G", "单腔体配4个手套口"),
+                "结构形式": [
+                    ProductOption("Only M（仅主舱体）", 0, "-M", "仅主舱体，无附加传递窗，适用于空间有限的独立操作"),
+                    ProductOption("LP+M（左传递窗+主舱体）", 15000, "-LPM", "左侧配置一个标准传递窗，用于物料传入/传出，适合基本的物流需求"),
+                    ProductOption("M+RP（主舱体+右传递窗）", 15000, "-MRP", "右侧配置一个标准传递窗，适合现场布局限制的场景"),
+                    ProductOption("LP+M+RP（左传递窗+主舱体+右传递窗）", 28000, "-LPMRP", "左右各一个传递窗，左进右出形成物流通道，最常用配置"),
+                    ProductOption("LP+M+R（左传递窗+主舱体+RTP口）", 35000, "-LPMR", "左侧传递窗+右侧RTP快速转移口，用于需要无菌对接传递的工艺"),
+                    ProductOption("LP+M+B（左传递窗+主舱体+BIBO袋）", 40000, "-LPMB", "左侧传递窗+右侧BIBO连续袋系统，用于大批量连续出料"),
                 ],
-                "传递舱": [
-                    ProductOption("不带传递舱", 0, "", "标准配置，无传递舱"),
-                    ProductOption("带传递舱", 25000, "-PT", "额外配置传递舱，含紫外灭菌和互锁"),
+                "洁净等级": [
+                    ProductOption("Class A (ISO 5) 动态", 0, "", "动态A级（ISO 5），无菌操作全过程中维持A级环境，最严格标准"),
+                    ProductOption("Class A 静态（仅静态A级）", -5000, "-AS", "仅静态时维持A级，操作时允许B级，适用于部分QC实验室"),
                 ],
                 "材质": [
-                    ProductOption("304不锈钢", 0, "", "标准304不锈钢（SUS304）"),
-                    ProductOption("316L不锈钢", 15000, "-316L", "耐腐蚀316L不锈钢"),
+                    ProductOption("304不锈钢（SUS304）", 0, "", "标准304不锈钢，适用于常规无菌检测环境"),
+                    ProductOption("316L不锈钢（SUS316L）", 15000, "-316L", "耐腐蚀316L不锈钢，适用于腐蚀性试剂或高要求环境"),
+                ],
+                "安装房间洁净等级": [
+                    ProductOption("Class B", 0, "", "B级背景环境，最严格安装要求"),
+                    ProductOption("Class C", 0, "-CC", "C级背景环境，常见QC实验室配置"),
+                    ProductOption("Class D", 0, "-CD", "D级背景环境"),
+                    ProductOption("CNC（受控非分级区）", 0, "-CNC", "受控但非分级区域，最低安装要求"),
+                ],
+                "手套配置": [
+                    ProductOption("分体式手套（Hypalon袖套+丁腈手套）", 0, "", "标准配置，袖套和手套可分开更换，成本低、维护方便，无菌检测推荐方案"),
+                    ProductOption("一体式手套", 8000, "-1G", "袖套和手套一体成型，密封性更好，推荐用于负压/高活隔离器"),
                 ],
                 "控制系统": [
-                    ProductOption("PLC+触摸屏", 0, "", "标准PLC控制+触摸屏人机界面"),
-                    ProductOption("PLC+触摸屏+远程监控", 12000, "-RM", "支持Web/APP远程查看和数据导出"),
+                    ProductOption("PLC+触摸屏（标准）", 0, "", "标准PLC控制+触摸屏人机界面，含基础数据记录"),
+                    ProductOption("PLC+触摸屏+21 CFR Part 11合规", 18000, "-P11", "含电子签名、审计追踪、数据完整性，符合FDA 21 CFR Part 11要求"),
                 ],
-                "验证文件": [
-                    ProductOption("IQ/OQ", 0, "", "安装确认+运行确认"),
-                    ProductOption("IQ/OQ/PQ", 15000, "-V", "含性能确认全套"),
+            },
+            # 内置配件 - 多选，用multi_selections传入
+            # 传感器配置 - 多选
+            # 文件资料 - 多选
+            multi_select_items={
+                "内置配件": [
+                    ProductOption("内置VHPS灭菌发生器", 25000, "",
+                        "集成于隔离器内的汽化过氧化氢灭菌系统，用于舱体内部周期性灭菌去污，无需外接发生装置"),
+                    ProductOption("内置无菌检测泵", 8000, "",
+                        "集成于工作台面的薄膜过滤用真空/压力泵，用于无菌检查的膜过滤法操作，标配2联设计"),
+                    ProductOption("内置粒子计数器", 12000, "",
+                        "集成式环境悬浮粒子监测，实时显示ISO等级，支持数据记录和报警，用于在线环境监测"),
+                    ProductOption("内置浮游菌采样器", 12000, "",
+                        "集成式浮游菌采样，配合培养皿进行空气微生物监测，用于环境菌落计数"),
+                    ProductOption("水/气喷枪（CIP）", 5000, "",
+                        "用于舱体内壁在线清洗（CIP），配合纯化水和压缩空气，减少人工擦拭操作"),
+                    ProductOption("防震台", 8000, "",
+                        "高精度称重专用防震平台，隔离来自地面的振动干扰，用于精密称量操作"),
+                    ProductOption("视频监控系统", 6000, "",
+                        "内置高清摄像头，实时监控并记录舱内操作过程，用于操作追溯和培训"),
+                ],
+                "传感器配置": [
+                    ProductOption("H2O2高浓度传感器（灭菌监测）", 8000, "",
+                        "安装于舱体内部，实时监测VHP灭菌过程中的过氧化氢浓度（高量程），用于灭菌循环验证"),
+                    ProductOption("H2O2低浓度传感器（残留监测）", 10000, "",
+                        "安装于舱体排风口，监测灭菌后排残的过氧化氢浓度（低量程ppb级），确保操作人员安全"),
+                    ProductOption("H2O2便携式浓度传感器（人员防护）", 5000, "",
+                        "可移动式过氧化氢浓度监测仪，用于操作人员随身佩戴或区域定点监测，确保工作环境安全"),
+                    ProductOption("温湿度传感器", 3000, "",
+                        "集成式温度和湿度监测，实时记录舱内环境参数，支持数据导出"),
+                    ProductOption("压差传感器", 3000, "",
+                        "监测舱体与背景环境的压差，确保隔离器密封性和定向气流"),
+                ],
+                "文件资料": [
+                    ProductOption("FAT（出厂验收测试）", 8000, "",
+                        "Factory Acceptance Test，在供应商工厂进行出厂前验收测试。按双方确认的测试协议执行，含测试报告"),
+                    ProductOption("SAT（现场验收测试）", 10000, "",
+                        "Site Acceptance Test，在客户现场安装后进行验收测试。按双方确认的协议执行，含测试报告"),
+                    ProductOption("DQ（设计确认）", 6000, "",
+                        "Design Qualification，确认设备设计符合URS要求，含设计文件审核"),
+                    ProductOption("FS（功能规格说明）", 5000, "",
+                        "Functional Specification，详细描述设备各项功能的技术规格文档"),
+                    ProductOption("HDS/SDS（硬件/软件设计规格）", 8000, "",
+                        "Hardware/Software Design Specification，硬件和软件设计详细说明文档"),
+                    ProductOption("IQ/OQ（安装/运行确认）", 12000, "",
+                        "Installation/Operational Qualification，安装确认和运行确认验证服务，含验证报告"),
                 ],
             },
             standard_configs=[
-                StandardConfig("标准型", {"腔体配置": "单腔体", "传递舱": "不带传递舱", "材质": "304不锈钢", "控制系统": "PLC+触摸屏", "验证文件": "IQ/OQ"}, "基础配置，满足常规无菌检测需求"),
-                StandardConfig("增强型", {"腔体配置": "2手套单腔体", "传递舱": "带传递舱", "材质": "304不锈钢", "控制系统": "PLC+触摸屏+远程监控", "验证文件": "IQ/OQ/PQ"}, "增强配置，带传递舱和远程监控"),
-                StandardConfig("旗舰型", {"腔体配置": "4手套单腔体", "传递舱": "带传递舱", "材质": "316L不锈钢", "控制系统": "PLC+触摸屏+远程监控", "验证文件": "IQ/OQ/PQ"}, "旗舰配置，4手套口+316L+传递舱+全套验证"),
+                StandardConfig("标准型",
+                    {"结构形式": "LP+M+RP（左传递窗+主舱体+右传递窗）", "洁净等级": "Class A (ISO 5) 动态",
+                     "材质": "304不锈钢（SUS304）", "安装房间洁净等级": "Class C",
+                     "手套配置": "分体式手套（Hypalon袖套+丁腈手套）", "控制系统": "PLC+触摸屏（标准）"},
+                    "基础配置，适用于常规无菌检测实验室",
+                    {"内置配件": ["内置VHPS灭菌发生器"], "传感器配置": ["H2O2高浓度传感器（灭菌监测）"], "文件资料": ["IQ/OQ（安装/运行确认）"]}),
+                StandardConfig("增强型",
+                    {"结构形式": "LP+M+RP（左传递窗+主舱体+右传递窗）", "洁净等级": "Class A (ISO 5) 动态",
+                     "材质": "304不锈钢（SUS304）", "安装房间洁净等级": "Class C",
+                     "手套配置": "分体式手套（Hypalon袖套+丁腈手套）", "控制系统": "PLC+触摸屏+21 CFR Part 11合规"},
+                    "增强配置，含21 CFR Part 11合规和内置检测泵",
+                    {"内置配件": ["内置VHPS灭菌发生器", "内置无菌检测泵", "内置粒子计数器"],
+                     "传感器配置": ["H2O2高浓度传感器（灭菌监测）", "H2O2低浓度传感器（残留监测）"],
+                     "文件资料": ["FAT（出厂验收测试）", "IQ/OQ（安装/运行确认）"]}),
+                StandardConfig("旗舰型",
+                    {"结构形式": "LP+M+R（左传递窗+主舱体+RTP口）", "洁净等级": "Class A (ISO 5) 动态",
+                     "材质": "316L不锈钢（SUS316L）", "安装房间洁净等级": "Class B",
+                     "手套配置": "分体式手套（Hypalon袖套+丁腈手套）", "控制系统": "PLC+触摸屏+21 CFR Part 11合规"},
+                    "旗舰配置，含RTP口+316L+全套传感器和验证文件",
+                    {"内置配件": ["内置VHPS灭菌发生器", "内置无菌检测泵", "内置粒子计数器", "内置浮游菌采样器", "视频监控系统"],
+                     "传感器配置": ["H2O2高浓度传感器（灭菌监测）", "H2O2低浓度传感器（残留监测）",
+                                   "H2O2便携式浓度传感器（人员防护）", "温湿度传感器", "压差传感器"],
+                     "文件资料": ["FAT（出厂验收测试）", "SAT（现场验收测试）", "DQ（设计确认）",
+                                "FS（功能规格说明）", "HDS/SDS（硬件/软件设计规格）", "IQ/OQ（安装/运行确认）"]}),
             ],
         ),
         "无菌操作隔离器": ProductType(
